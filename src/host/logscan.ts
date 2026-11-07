@@ -42,8 +42,8 @@ export function scanRecentFailures(logsDir: string, windowMinutes: number, now =
   }
   if (files.length === 0) return { failures: 0, lastFailureAt: null, newestLogTime: null }
 
-  // 最新文件足够覆盖窗口；若窗口起点早于最新文件的首条时间，再把前一个文件的尾部也扫上。
-  const candidates = files.slice(-1)
+  // 扫描最近两个分段文件（窗口可能跨越轮转边界；旧文件整段超出窗口时自然计 0）
+  const candidates = files.slice(-2)
   let failures = 0
   let lastFailureAt: string | null = null
   let newestLogTime: string | null = null

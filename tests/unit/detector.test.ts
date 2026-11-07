@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { describe, it } from 'node:test'
 import { classify, type DetectorInput } from '../../src/host/detector.js'
-import { parseLine } from '../../src/host/logscan.js'
+import { parseLine, scanRecentFailures } from '../../src/host/logscan.js'
 import { splitCommandLine } from '../../src/host/process.js'
 
 const base: DetectorInput = {
@@ -96,3 +99,49 @@ describe('process.splitCommandLine', () => {
     assert.equal(splitCommandLine('   '), null)
   })
 })
+
+describe('logscan.scanRecentFailures（跨轮转文件）', () => {
+  function line(time: string, marker = true): string {
+    const msg = marker ? 'backend authentication request failed: ; reconnecting in 3.0s' : 'heartbeat sent'
+    return JSON.stringify([
+      { source: 'connector', record: { time, level: marker ? 'WARNING' : 'INFO', name: 'connector.server.client', message: `connector backend network unavailable error=${msg}` } },
+    ])
+  }
+
+  it('窗口跨越轮转边界时，旧文件尾部与新城文件都计入', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'doctor-logscan-'))
+    const now = Date.now()
+    // 旧文件：T-6min 与 T-4min 各一次失败（T-4min 在窗口内）
+    const old = [
+      line(new Date(now - 6 * MIN).toISOString()),
+      line(new Date(now - 4 * MIN).toISOString()),
+    ].join('\n')
+    // 新文件：T-1min 一次失败
+    const cur = line(new Date(now - 1 * MIN).toISOString())
+    fs.writeFileSync(path.join(dir, 'runtime-00000000000000000100.jsonl'), old + '\n')
+    fs.writeFileSync(path.join(dir, 'runtime-00000000000000000101.jsonl'), cur + '\n')
+    const r = scanRecentFailures(dir, 5, now)
+    assert.equal(r.failures, 2)
+    assert.ok(r.lastFailureAt!.startsWith(new Date(now - 1 * MIN).toISOString().slice(0, 16)))
+    fs.rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('旧文件整段超出窗口 → 只计新文件的', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'doctor-logscan-'))
+    const now = Date.now()
+    const old = line(new Date(now - 60 * MIN).toISOString())
+    const cur = line(new Date(now - 1 * MIN).toISOString())
+    fs.writeFileSync(path.join(dir, 'runtime-00000000000000000200.jsonl'), old + '\n')
+    fs.writeFileSync(path.join(dir, 'runtime-00000000000000000201.jsonl'), cur + '\n')
+    const r = scanRecentFailures(dir, 5, now)
+    assert.equal(r.failures, 1)
+    fs.rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('日志目录不存在 → 0 次失败', () => {
+    const r = scanRecentFailures('/nonexistent/logs-dir-xyz', 5)
+    assert.equal(r.failures, 0)
+  })
+})
+
+const MIN = 60_000
