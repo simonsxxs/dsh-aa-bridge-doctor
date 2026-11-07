@@ -56,7 +56,7 @@ export function startDoctor(config: ConfigType, paths: AaPaths): () => void {
     try {
       await runOnce(config, settings, paths, healer)
       if (settings.checkDeviceApi) {
-        await checkDshRuntimeStuck(settings, paths, healer, startingSeen, stuckNotified)
+        await checkDshRuntimeStuck(paths, startingSeen, stuckNotified)
       }
     } catch (err) {
       appendLog(paths.doctorLog, `检查轮出错: ${err instanceof Error ? err.stack : String(err)}`)
@@ -172,9 +172,19 @@ async function runOnce(
   )
 }
 
+const LOG_ROTATE_BYTES = 512 * 1024
+
+/** 纯函数：日志是否需要轮转（超过上限滚动为 .1 单备份） */
+export function shouldRotateLog(sizeBytes: number): boolean {
+  return sizeBytes > LOG_ROTATE_BYTES
+}
+
 function appendLog(file: string, line: string): void {
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true })
+    if (shouldRotateLog(fs.statSync(file).size)) {
+      fs.renameSync(file, `${file}.1`)
+    }
     fs.appendFileSync(file, `[${new Date().toISOString()}] ${line}\n`)
   } catch {
     /* 日志失败不影响主流程 */
@@ -183,13 +193,10 @@ function appendLog(file: string, line: string): void {
 
 /** #501 形态检测：DSH Runtime 卡「正在同步 DSH 会话…」超过阈值 → 通知恢复指引（只提醒，不动状态） */
 async function checkDshRuntimeStuck(
-  settings: { checkDeviceApi: boolean },
   paths: ReturnType<typeof aaPaths>,
-  healer: Healer,
   startingSeen: Map<string, number>,
   stuckNotified: Set<string>,
 ): Promise<void> {
-  if (!settings.checkDeviceApi) return
   const account = readAccount(paths)
   const cid = readConnectorId(paths)
   if (!account || !cid) return
