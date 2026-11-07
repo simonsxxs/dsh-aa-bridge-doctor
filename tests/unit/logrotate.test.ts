@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { shouldRotateLog } from '../src/host/index.js'
+import { shouldRotateLog } from '../../src/host/index.js'
 
 describe('index.shouldRotateLog', () => {
   it('超过 512KB → 轮转', () => {
