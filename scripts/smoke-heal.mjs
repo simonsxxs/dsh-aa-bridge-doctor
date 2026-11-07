@@ -117,37 +117,46 @@ try {
     // 标准 argv 拉起（③ 同理）都与真实 Connector 一样长驻
     const staticPreload = path.join(path.dirname(new URL(import.meta.url).pathname), '__fixture_preload.cjs')
     process.env.NODE_OPTIONS = `--require ${staticPreload}`
-    process.env.DOCTOR_SMOKE_FLAG = fx.preloadFlag
+    process.env.DOCTOR_SMOKE_FLAG = fx.preloadFlag // 每场景独立 flag（五轮闭环修复）
     const oldProc = spawn(fx.uvBin, ['run', '--directory', fx.sourceDir, 'anywhere-cli', 'rpc', '--config', fx.configPath], { stdio: 'ignore' })
     cleanupProcs.push(oldProc)
     await new Promise((r) => setTimeout(r, 500))
+    const markerBefore = fs.existsSync(fx.preloadFlag) ? fs.readFileSync(fx.preloadFlag, 'utf8').trim().split('\n').length : 0
     const outcome = await healer.restartWedged(oldProc.pid, 'dsh-plugin')
     const oldDead = await waitDead(oldProc.pid)
     await new Promise((r) => setTimeout(r, 800))
-    const marker = fs.existsSync(fx.marker) ? fs.readFileSync(fx.marker, 'utf8') : null
-    const markerLines = marker ? marker.trim().split('\n').length : 0
     const newAlive = outcome.pid ? alive(outcome.pid) : false
-    const ok = outcome.ok && oldDead && newAlive && outcome.pid !== undefined
+    const markerLines = fs.existsSync(fx.preloadFlag) ? fs.readFileSync(fx.preloadFlag, 'utf8').trim().split('\n').length : 0
+    // 五轮闭环：断言记录次数（oldProc 一次 + relaunch 一次 → ≥ before+1）且含新 pid 的调用
+    const relaunchLine = fs.existsSync(fx.preloadFlag)
+      ? fs.readFileSync(fx.preloadFlag, 'utf8').split('\n').some((l) => l.includes('anywhere-cli') && l.includes('rpc'))
+      : false
+    const ok = outcome.ok && oldDead && newAlive && outcome.pid !== undefined && markerLines >= markerBefore + 1 && relaunchLine
     results.push([
-      '② wedged: PID 防线放行 + SIGTERM 生效 + 假 uv 二次调用 + 新进程拉起',
+      '② wedged: PID 防线放行 + SIGTERM 生效 + 假 uv 二次调用（记录数闭环）+ 新进程拉起',
       ok,
       `outcome=${JSON.stringify(outcome)} oldDead=${oldDead} markerLines=${markerLines} newAlive=${newAlive}`,
     ])
     if (outcome.pid) cleanupProcs.push({ kill: () => process.kill(outcome.pid, 'SIGKILL') })
   }
 
-  // ③ exited：进程早已死亡 → 假 uv 重新拉起
+  // ③ exited：进程早已死亡 → 假 uv 重新拉起（五轮闭环：独立 flag + relaunch 记录断言）
   {
     const fx = makeFixture('exited', 0)
+    process.env.DOCTOR_SMOKE_FLAG = fx.preloadFlag // 本场景自己的记录路径
     const healer = new Healer(fx.paths, (l) => console.log(`    [log] ${l}`), fx.uvBin)
     const outcome = await healer.relaunchExited('dsh-plugin')
-    const marker = await waitMarker(fx.marker)
     const newAlive = outcome.pid ? alive(outcome.pid) : false
-    const ok = outcome.ok && outcome.pid !== undefined && newAlive
+    const ownFlagLines = fs.existsSync(fx.preloadFlag)
+      ? fs.readFileSync(fx.preloadFlag, 'utf8').trim().split('\n').length
+      : 0
+    const ok =
+      outcome.ok && outcome.pid !== undefined && newAlive &&
+      ownFlagLines >= 1 // relaunch 确实在本场景夹具上留下了调用记录
     results.push([
-      '③ exited: 返回新 pid + 新进程存活（yes 副本经标准 argv 拉起）',
+      '③ exited: 返回新 pid + 新进程存活 + 本夹具调用记录闭环',
       ok,
-      `outcome=${JSON.stringify(outcome)} marker=${marker ? '有' : '无'} newAlive=${newAlive}`,
+      `outcome=${JSON.stringify(outcome)} ownFlagLines=${ownFlagLines} newAlive=${newAlive}`,
     ])
     if (outcome.pid) cleanupProcs.push({ kill: () => process.kill(outcome.pid, 'SIGKILL') })
   }

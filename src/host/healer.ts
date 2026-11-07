@@ -42,10 +42,21 @@ const CONNECTOR_EXEC_ALLOWLIST = /^(uv|python(\d+(\.\d+)?)?|python|anywhere-cli|
  * config 路径）不满足任一条件——评审四轮的"准确路径伪造"样例因此被拒。
  * comm 来自内核，不受 argv 伪装影响；无法获取 → null（Fail Closed）。
  */
-export function isConnectorExecutable(execPath: string | null, discoveredUv?: string | null): boolean | null {
+export function isConnectorExecutable(
+  execPath: string | null,
+  discoveredUv?: string | null,
+  sourceDir?: string | null,
+): boolean | null {
   if (execPath === null) return null
+  // 锚点一：本 Doctor 发现的 uv 二进制（含 DSH 内置 / ~/.local/bin / PATH 命中）
   if (discoveredUv && execPath === discoveredUv) return true
-  if (execPath.includes('/.agents-anywhere/')) {
+  // 锚点二：~/.agents-anywhere/ 树内（AA 插件的 connector-venv python 所在地）
+  // 锚点三：本机 connector-source 目录内（uv run 在项目目录创建 .venv，
+  //          DSH Desktop 内置 connector 形态的 venv 解释器在此，而非全局树）
+  const anchored =
+    execPath.includes('/.agents-anywhere/') ||
+    (sourceDir !== null && sourceDir !== undefined && execPath.startsWith(sourceDir + '/'))
+  if (anchored) {
     const base = execPath.split('/').pop() ?? ''
     return CONNECTOR_EXEC_ALLOWLIST.test(base)
   }
@@ -245,7 +256,7 @@ export class Healer {
       return { confirmed: null, commandLine, evidence: '本机安装参数不完整（source/uv 缺失）' }
     }
     const argvOk = isConnectorCommandLine(commandLine, this.paths.connectorConfig, sourceDir)
-    const execOk = isConnectorExecutable(execPath, uv)
+    const execOk = isConnectorExecutable(execPath, uv, sourceDir)
     if (argvOk === false || execOk === false) {
       return { confirmed: false, commandLine, evidence: `argv形态=${argvOk} comm=${execPath ?? '?'}` }
     }

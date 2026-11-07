@@ -100,10 +100,27 @@ describe('healer.isConnectorExecutable（第二因子：comm allowlist）', () =
     )
   })
 
-  it('系统 python3 / 家目录 uv（非本机发现值、不在树内）→ false（四轮修复核心）', () => {
-    assert.equal(isConnectorExecutable('/usr/bin/python3', UV), false)
-    assert.equal(isConnectorExecutable('/opt/homebrew/bin/python3', UV), false)
-    assert.equal(isConnectorExecutable('/opt/homebrew/bin/uv', UV), false)
+  it('系统 python3 / 家目录 uv（非本机发现值、不在任何锚点内）→ false（四轮修复核心）', () => {
+    assert.equal(isConnectorExecutable('/usr/bin/python3', UV, SRC), false)
+    assert.equal(isConnectorExecutable('/opt/homebrew/bin/python3', UV, SRC), false)
+    assert.equal(isConnectorExecutable('/opt/homebrew/bin/uv', UV, SRC), false)
+    assert.equal(isConnectorExecutable('/Applications/DSH NEXT.app/Contents/uv-copy', UV, SRC), false)
+  })
+
+  it('sourceDir 内的 .venv 解释器（DSH Desktop 内置 connector 形态，五轮补锚点）→ true', () => {
+    assert.equal(
+      isConnectorExecutable(`${SRC}/.venv/bin/Python.app/Contents/MacOS/Python`, UV, SRC),
+      true,
+    )
+    assert.equal(isConnectorExecutable(`${SRC}/.venv/bin/python3`, UV, SRC), true)
+  })
+
+  it('sourceDir 前缀相似但不相同时 → false（用 DSH Desktop 形态：sourceDir 在 /Applications，避开 .agents-anywhere 树锚点干扰）', () => {
+    const desktopSrc = '/Applications/DSH NEXT.app/Contents/Resources/app.asar.unpacked/node_modules/@agents-anywhere/dsh-bridge-next/lib/bundled-connector'
+    const fake = `${desktopSrc}-2/.venv/bin/python3`
+    assert.equal(isConnectorExecutable(fake, UV, desktopSrc), false)
+    // 真路径（sourceDir 内）→ true
+    assert.equal(isConnectorExecutable(`${desktopSrc}/.venv/bin/python3`, UV, desktopSrc), true)
   })
 
   it('tail / sleep / bash / 无关路径 → false（comm 来自内核，不可伪造）', () => {
