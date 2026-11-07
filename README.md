@@ -24,7 +24,7 @@
 
 | 判定 | 条件 | 默认动作 |
 |---|---|---|
-| `exited` | 记录存在但进程死亡 | 通知；`autoRestartExited` 开启时**自动重新拉起**（无租约冲突，安全） |
+| `exited` | 记录存在但进程死亡。**护栏**：退出记录新鲜（< 10 分钟，多半是用户主动停止或插件受控重启）时只提醒不拉起；退出已久无人处理的（#1334 形态）才自动重新拉起 | 通知；`autoRestartExited` 开启且判定为陈旧死亡时**自动重新拉起**（无租约冲突，安全） |
 | `wedged` | 进程存活且窗口内失败 ≥ `failureThreshold` | 通知；`autoRestartWedged` 开启时**自动重启 Connector**（SIGTERM→等退出→按原命令行/标准命令重新拉起） |
 | `stuck-syncing` | （需 `checkDeviceApi`）DSH Runtime 卡「正在同步 DSH 会话…」≥ 15 分钟 | 通知恢复指引：设备页对 DeepSeek Harness 重新「一键配置」（#501 形态） |
 | `healthy` / `not-installed` | 其余 | 不动作 |

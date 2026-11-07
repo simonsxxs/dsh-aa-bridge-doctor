@@ -2,13 +2,14 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { Config, type Config as ConfigType } from './config.js'
-import { aaPaths } from './paths.js'
+import { aaPaths, type AaPaths } from './paths.js'
 import { classify } from './detector.js'
 import { scanRecentFailures } from './logscan.js'
 import { isAlive } from './process.js'
 import { notify } from './notifier.js'
 import { Healer } from './healer.js'
 import { readAccount, readConnectorId, fetchDeviceStatus, fetchDshRuntime, findStuckDshRuntime } from './device.js'
+import { readLastProcessExit, shouldAutoRelaunchExited } from './exitlog.js'
 
 export { Config }
 export const name = 'dsh-aa-bridge-doctor'
@@ -24,7 +25,11 @@ const DEFAULTS = {
 
 export function apply(ctx: Context, config: ConfigType) {
   if (!config.enabled) return
-  const paths = aaPaths()
+  return startDoctor(config, aaPaths())
+}
+
+/** 可注入路径的核心启动逻辑（便于测试与复用） */
+export function startDoctor(config: ConfigType, paths: AaPaths): () => void {
   const healer = new Healer(paths, (line) => appendLog(paths.doctorLog, line))
   const settings = {
     failureThreshold: config.failureThreshold ?? DEFAULTS.failureThreshold,
@@ -33,6 +38,7 @@ export function apply(ctx: Context, config: ConfigType) {
     maxRestartsPerDay: config.maxRestartsPerDay ?? DEFAULTS.maxRestartsPerDay,
     pollSeconds: Math.max(10, config.pollSeconds ?? DEFAULTS.pollSeconds),
     checkDeviceApi: config.checkDeviceApi ?? false,
+    stuckStartingMinutes: DEFAULTS.stuckStartingMinutes,
   }
   // DSH Runtime 卡「正在同步」的首次观测时间（会话内存即可）
   const startingSeen = new Map<string, number>()
@@ -106,16 +112,32 @@ async function runOnce(
     failureThreshold: settings.failureThreshold,
   })
 
-  if (verdict.state === 'not-installed' || verdict.state === 'healthy') return
+  if (verdict.state === 'not-installed') return
+  if (verdict.state === 'healthy') {
+    appendLog(paths.doctorLog, `检查正常: 进程=存活 近${settings.windowMinutes}分钟失败=${scan.failures}`)
+    return
+  }
 
   // 5) 冷却/配额 + 模式开关
   const kind = verdict.state
   const gate = healer.canHeal(kind, settings.cooldownMinutes, settings.maxRestartsPerDay)
-  const autoEnabled = verdict.state === 'exited' ? config.autoRestartExited : config.autoRestartWedged
+  let autoEnabled = verdict.state === 'exited' ? config.autoRestartExited : config.autoRestartWedged
+
+  // 5.1) exited 场景的「新鲜退出」护栏：刚退出（<10 分钟）多半是用户主动停止或插件受控重启，
+  //      自动拉起会与人对着干；只有陈旧死亡（死了很久没人处理）才值得自动拉起（#1334 场景）。
+  let exitGuardReason: string | null = null
+  if (verdict.state === 'exited') {
+    const exitInfo = readLastProcessExit(paths.connectorOutputLog)
+    const guard = shouldAutoRelaunchExited(exitInfo, Date.now())
+    if (!guard.auto) {
+      autoEnabled = false
+      exitGuardReason = guard.reason
+    }
+  }
 
   appendLog(
     paths.doctorLog,
-    `检测到 ${verdict.state}: ${verdict.reason} | 近${settings.windowMinutes}分钟失败=${scan.failures} 最后失败=${scan.lastFailureAt ?? '-'} | 自动恢复=${autoEnabled && gate.allowed ? '执行' : `跳过（${autoEnabled ? gate.reason : '模式未开启'}）`}`,
+    `检测到 ${verdict.state}: ${verdict.reason} | 近${settings.windowMinutes}分钟失败=${scan.failures} 最后失败=${scan.lastFailureAt ?? '-'} | 自动恢复=${autoEnabled && gate.allowed ? '执行' : `跳过（${autoEnabled ? gate.reason : '模式未开启'}${exitGuardReason ? `；${exitGuardReason}` : ''}）`}`,
   )
 
   // 6) 行动

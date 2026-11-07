@@ -10,6 +10,7 @@ export interface AaPaths {
   connectorConfig: string
   accountJson: string
   connectorSourceDir: string
+  connectorOutputLog: string
   doctorDir: string
   doctorLog: string
   doctorState: string
@@ -25,6 +26,7 @@ export function aaPaths(home = os.homedir()): AaPaths {
     connectorConfig: path.join(aaDir, 'dsh-bridge-next', 'connector', 'connector.json'),
     accountJson: path.join(aaDir, 'dsh-bridge-next', 'account.json'),
     connectorSourceDir: path.join(aaDir, 'dsh-bridge-next', 'connector-source'),
+    connectorOutputLog: path.join(aaDir, 'dsh-bridge-next', 'logs', 'connector-output.json'),
     doctorDir: path.join(aaDir, 'bridge-doctor'),
     doctorLog: path.join(aaDir, 'bridge-doctor', 'bridge-doctor.log'),
     doctorState: path.join(aaDir, 'bridge-doctor', 'state.json'),
