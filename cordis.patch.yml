@@ -1,0 +1,4 @@
+- insert:
+    - id: dsh-aa-bridge-doctor
+      name: dsh-aa-bridge-doctor
+      config: {}
