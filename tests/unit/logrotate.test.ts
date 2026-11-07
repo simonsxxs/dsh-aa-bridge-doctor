@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import path from 'node:path'
 import fs from 'node:fs'
+import os from 'node:os'
 import { shouldRotateLog, appendLog } from '../../src/host/index.js'
 
 describe('index.appendLog（首写与轮转）', () => {
