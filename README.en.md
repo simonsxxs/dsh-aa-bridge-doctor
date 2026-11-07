@@ -71,6 +71,12 @@ npx tsx scripts/smoke-heal.mjs    # hermetic kill→relaunch mechanics smoke
 
 Pure-tsc build, no native bundler, Node ≥ 22.19.
 
+## Author
+
+**simon** — [github.com/simonsxxs](https://github.com/simonsxxs)
+
+This plugin was born from a real-world incident investigation; see [docs/ROOT_CAUSE.md](./docs/ROOT_CAUSE.md) for the full root-cause analysis.
+
 ## License
 
-MIT
+MIT © simon (https://github.com/simonsxxs)

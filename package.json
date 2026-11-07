@@ -4,7 +4,7 @@
   "description": "Detect and auto-recover Agents Anywhere bridge wedge (persistent device offline) for DeepSeek Harness",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/YOUR_ACCOUNT/dsh-aa-bridge-doctor.git"
+    "url": "git+https://github.com/simonsxxs/dsh-aa-bridge-doctor.git"
   },
   "type": "module",
   "main": "./lib/index.js",
@@ -57,5 +57,14 @@
       "esbuild"
     ]
   },
-  "license": "MIT"
+  "license": "MIT",
+  "author": "simon <128762930+simonsxxs@users.noreply.github.com> (https://github.com/simonsxxs)",
+  "keywords": [
+    "deepseek-harness",
+    "agents-anywhere",
+    "dsh-plugin",
+    "watchdog",
+    "self-healing",
+    "bridge-doctor"
+  ]
 }

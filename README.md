@@ -97,6 +97,12 @@ npm run check   # typecheck + build + 12 项单元测试
 
 无原生打包依赖（纯 tsc），任何 Node ≥ 22.19 环境可构建。
 
+## 作者 / Author
+
+**simon** — [github.com/simonsxxs](https://github.com/simonsxxs)
+
+背景与技术分析：本插件源于一次真实的桥接故障取证，根因报告见 [docs/ROOT_CAUSE.md](./docs/ROOT_CAUSE.md)。
+
 ## License
 
-MIT
+MIT © simon (https://github.com/simonsxxs)
