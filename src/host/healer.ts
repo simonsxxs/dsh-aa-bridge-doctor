@@ -25,6 +25,15 @@ interface LaunchPlan {
   source: string
 }
 
+/**
+ * PID 复用防线判定：命令行是否确属 Connector。
+ * 返回 true=确认是 / false=确认不是（拒绝杀）/ null=无法验证（ps 不可用或平台不支持，交由调用方权衡）。
+ */
+export function isConnectorCommandLine(commandLine: string | null): boolean | null {
+  if (commandLine === null) return null
+  return commandLine.includes('anywhere-cli') || commandLine.includes('connector.json')
+}
+
 function execPromise(cmd: string, args: string[], timeout = 5_000): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(cmd, args, { timeout }, (err, stdout) => (err ? reject(err) : resolve(stdout)))
@@ -108,6 +117,15 @@ export class Healer {
     this.log(`处理：重启卡死的 Connector pid=${pid}`)
     const commandLine = await getCommandLine(pid)
     if (commandLine) this.log(`原命令行（仅诊断）: ${commandLine}`)
+    // PID 复用防线：pid 可能已被系统回收并分配给无关进程。杀之前校验命令行确属 Connector。
+    const connectorConfirmed = isConnectorCommandLine(commandLine)
+    if (connectorConfirmed === false) {
+      this.log(`PID 复用防线生效：pid=${pid} 的命令行不是 Connector（${commandLine!.slice(0, 80)}…），中止杀进程`)
+      return { action: 'restart', ok: false, detail: 'PID 已被无关进程占用（防御中止）' }
+    }
+    if (connectorConfirmed === null) {
+      this.log('无法验证命令行（ps 不可用或平台不支持），按记录 pid 继续')
+    }
     const stop = await terminate(pid)
     if (stop === 'killed') {
       this.log('旧进程在 SIGKILL 后仍存活，放弃本次恢复')
