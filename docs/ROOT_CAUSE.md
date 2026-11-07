@@ -114,6 +114,9 @@ connector/server/auth.py:55
 2. **Phase 2**：插件 MVP——检测 + 通知 + 面板一键重启按钮
 3. **Phase 3**：自动自愈模式 + npm/GitHub 分发
 
+
+> **实现注记（v0.2.0）**：上表「自愈」一列的 MeshCall `aa.local.v2.Control.restart` 与 DSH 面板卡片为设计目标（设计稿 v1）；当前实现走「检测签名 → SIGTERM → 等价重启进程」路径，通知为 macOS 通知中心（Linux notify-send / Windows PowerShell 弹窗尽力支持）。检测侧与设计稿一致：三源信号（进程存活 + 日志签名 + 云端状态交叉验证）均已接线。
+
 ## 七、全网同类问题调研（2026-11-07，GitHub 官方仓库）
 
 > 调研方法：GitHub API 精确错误字符串搜索 + 仓库 issue/PR 全量扫描 + main 分支源码比对。搜索命中 300+ 条相关记录。

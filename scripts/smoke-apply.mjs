@@ -83,8 +83,8 @@ try {
     const log = readLog(home, 'healthy')
     results.push([
       '① healthy: 启动+检查正常+无恢复动作',
-      log.includes('Bridge Doctor 启动') && log.includes('检查正常') && !log.includes('恢复结果'),
-      log.split('\n').filter((l) => l.includes('检查正常')).length >= 1,
+      log.includes('Bridge Doctor 启动') && (log.includes('检查正常') || log.includes('恢复正常')) && !log.includes('恢复结果'),
+      log.split('\n').filter((l) => l.includes('检查正常') || l.includes('恢复正常')).length >= 1,
     ])
     fs.rmSync(home, { recursive: true, force: true })
   }

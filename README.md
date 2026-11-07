@@ -20,7 +20,8 @@
 
 1. **进程信号**：读取 `~/.agents-anywhere/connector-runtime.json` 中的 pid，验证进程存活
 2. **日志信号**：扫描 `~/.agents-anywhere/logs/runtime-*.jsonl`，统计时间窗口内的鉴权失败次数
-3. （可选）**云端信号**：调用 AA 服务端 API 核对设备在线状态（需开启 `checkDeviceApi`）
+3. **日志静默信号**：进程存活但 AA 日志 ≥ `logSilenceMinutes` 无写入 → 事件循环挂死变体
+4. （需开启 `checkDeviceApi`）**云端信号**：设备离线交叉验证（连续离线 → 提醒路由/代理问题）+ DSH Runtime 卡「正在同步」检测（#501）
 
 | 判定 | 条件 | 默认动作 |
 |---|---|---|
@@ -81,6 +82,15 @@ dsh plugin --profile desktop add .
 | `maxRestartsPerDay` | `6` | 每日自动恢复上限 |
 | `pollSeconds` | `30` | 检查间隔 |
 | `checkDeviceApi` | `false` | 联网核对设备状态（读取本机 `account.json` 的 token，仅查询、不落日志） |
+
+
+## 平台支持 / Platform
+
+| 平台 | 状态 | 说明 |
+|---|---|---|
+| macOS (Apple Silicon / Intel) | ✅ 一等支持 | 全部功能实测（检测/通知/恢复/护栏） |
+| Linux | ⚠️ 尽力支持 | 检测与恢复可用；通知走 `notify-send`（未装则静默）；uv 发现链有 PATH 兜底但未实测 |
+| Windows | ❌ 未测 | 代码路径存在（PowerShell 弹窗通知、进程操作），无实机验证，欢迎反馈 |
 
 ## 隐私 / Privacy
 

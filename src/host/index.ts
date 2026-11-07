@@ -16,12 +16,16 @@ export { Config }
 export const name = 'dsh-aa-bridge-doctor'
 
 const DEFAULTS = {
-  failureThreshold: 5,
-  windowMinutes: 5,
+  failureThreshold: 4,
+  windowMinutes: 10,
+  logSilenceMinutes: 15,
   cooldownMinutes: 60,
   maxRestartsPerDay: 6,
   pollSeconds: 30,
   stuckStartingMinutes: 15,
+  deviceOfflineStreak: 3,
+  deviceOfflineNotifyCooldownMs: 10 * 60_000,
+  healthyHeartbeatMs: 60 * 60_000,
 }
 
 export function apply(ctx: Context, config: ConfigType) {
@@ -44,6 +48,7 @@ export function startDoctor(
   const settings = {
     failureThreshold: config.failureThreshold ?? DEFAULTS.failureThreshold,
     windowMinutes: config.windowMinutes ?? DEFAULTS.windowMinutes,
+    logSilenceMinutes: config.logSilenceMinutes ?? DEFAULTS.logSilenceMinutes,
     cooldownMinutes: config.cooldownMinutes ?? DEFAULTS.cooldownMinutes,
     maxRestartsPerDay: config.maxRestartsPerDay ?? DEFAULTS.maxRestartsPerDay,
     pollSeconds: Math.max(10, config.pollSeconds ?? DEFAULTS.pollSeconds),
@@ -53,6 +58,10 @@ export function startDoctor(
   // DSH Runtime 卡「正在同步」的首次观测时间（会话内存即可）
   const startingSeen = new Map<string, number>()
   const stuckNotified = new Set<string>()
+  // 云端交叉验证的连续离线计数与提醒冷却（会话内存）
+  const offlineTracker = { streak: 0, lastNotifyAt: 0 }
+  // healthy 日志降噪：仅状态变化 + 每小时心跳
+  const healthLog = { lastState: 'not-installed' as string, lastHealthyLogAt: 0 }
 
   appendLog(
     paths.doctorLog,
@@ -98,7 +107,7 @@ export function startDoctor(
       } catch {
         /* 标记读取失败按无更新处理 */
       }
-      await runOnce(config, settings, paths, healer)
+      await runOnce(config, settings, paths, healer, offlineTracker, healthLog)
       if (settings.checkDeviceApi) {
         await checkDshRuntimeStuck(paths, startingSeen, stuckNotified)
       }
@@ -121,12 +130,16 @@ async function runOnce(
   settings: {
     failureThreshold: number
     windowMinutes: number
+    logSilenceMinutes: number
     cooldownMinutes: number
     maxRestartsPerDay: number
     pollSeconds: number
+    checkDeviceApi: boolean
   },
   paths: ReturnType<typeof aaPaths>,
   healer: Healer,
+  offlineTracker: { streak: number; lastNotifyAt: number },
+  healthLog: { lastState: string; lastHealthyLogAt: number },
 ): Promise<void> {
   // 1) 共享运行记录（未安装/未授权时不存在）
   let runtimeRecord: { runtime?: { pid?: number; kind?: string } } | null = null
@@ -141,8 +154,10 @@ async function runOnce(
   // 2) 进程存活
   const processAlive = pid !== undefined ? await isAlive(pid) : false
 
-  // 3) 窗口内失败计数
+  // 3) 窗口内失败计数 + 日志新鲜度
   const scan = scanRecentFailures(paths.logsDir, settings.windowMinutes)
+  const newestLogAgeMin =
+    scan.newestLogTime !== null ? (Date.now() - Date.parse(scan.newestLogTime)) / 60_000 : null
 
   // 4) 判定（纯函数）
   const verdict = classify({
@@ -150,13 +165,56 @@ async function runOnce(
     processAlive,
     failuresInWindow: scan.failures,
     failureThreshold: settings.failureThreshold,
+    newestLogAgeMin,
+    logSilenceMinutes: settings.logSilenceMinutes,
   })
 
   if (verdict.state === 'not-installed') return
+
+  // 4.1) 云端交叉验证（checkDeviceApi 开启时）：本机判定 healthy 但云端设备离线
+  //      连续 N 次（≈N×pollSeconds）→ 提醒"疑似路由/代理问题"（不自动重启——
+  //      该形态重启无益，需用户检查网络路径）
+  if (verdict.state === 'healthy' && settings.checkDeviceApi) {
+    const account = readAccount(paths)
+    const cid = readConnectorId(paths)
+    if (account && cid) {
+      const dev = await fetchDeviceStatus(account.apiBaseUrl, account.accessToken, cid)
+      if (dev && dev.online === false && processAlive) {
+        offlineTracker.streak += 1
+        if (
+          offlineTracker.streak >= DEFAULTS.deviceOfflineStreak &&
+          Date.now() - offlineTracker.lastNotifyAt > DEFAULTS.deviceOfflineNotifyCooldownMs
+        ) {
+          offlineTracker.lastNotifyAt = Date.now()
+          appendLog(
+            paths.doctorLog,
+            `云端交叉验证: 设备离线已连续 ${offlineTracker.streak} 次检查，但本机日志无失败（疑似路由/代理问题，重启 Connector 无益）`,
+          )
+          notify(
+            'AA Bridge Doctor',
+            '云端显示设备离线，但本机未检测到鉴权失败——疑似本机到服务器的路由/代理问题。请检查代理后打开 AA 面板重启 Connector。',
+          )
+        }
+      } else if (dev && dev.online === true) {
+        offlineTracker.streak = 0
+      }
+    }
+  }
+
   if (verdict.state === 'healthy') {
-    appendLog(paths.doctorLog, `检查正常: 进程=存活 近${settings.windowMinutes}分钟失败=${scan.failures}`)
+    // 日志降噪：仅在状态从不健康→健康变化时记录，或每小时一条心跳
+    const now = Date.now()
+    if (healthLog.lastState !== 'healthy') {
+      appendLog(paths.doctorLog, `恢复正常: 进程=存活 近${settings.windowMinutes}分钟失败=${scan.failures} 日志新鲜度=${newestLogAgeMin !== null ? Math.round(newestLogAgeMin) + '分钟前' : '未知'}`)
+      healthLog.lastHealthyLogAt = now
+    } else if (now - healthLog.lastHealthyLogAt >= DEFAULTS.healthyHeartbeatMs) {
+      appendLog(paths.doctorLog, `检查正常（每小时心跳）: 进程=存活 近${settings.windowMinutes}分钟失败=${scan.failures}`)
+      healthLog.lastHealthyLogAt = now
+    }
+    healthLog.lastState = 'healthy'
     return
   }
+  healthLog.lastState = verdict.state
 
   // 5) 冷却/配额 + 模式开关
   const kind = verdict.state

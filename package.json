@@ -1,6 +1,6 @@
 {
   "name": "dsh-aa-bridge-doctor",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Detect and auto-recover Agents Anywhere bridge wedge (persistent device offline) for DeepSeek Harness",
   "repository": {
     "type": "git",

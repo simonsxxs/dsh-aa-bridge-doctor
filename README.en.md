@@ -51,10 +51,20 @@ Manual install (verified against real DSH NEXT profiles) — see [README.md 方�
 | `uvPath` | `''` | custom uv path (empty = auto-discover) |
 | `autoRestartExited` | `true` | auto-relaunch after process exit (guarded) |
 | `autoRestartWedged` | `false` | auto-restart on wedge (default notify-only) |
-| `failureThreshold` / `windowMinutes` | `5` / `5` | wedge signature |
+| `failureThreshold` / `windowMinutes` | `4` / `10` | wedge signature (derived from the #381 60–120s cadence; the old 5/5 missed it) |
 | `cooldownMinutes` / `maxRestartsPerDay` | `60` / `6` | anti-flapping |
+| `logSilenceMinutes` | `15` | log-silence detection while the process is alive |
 | `pollSeconds` | `30` | check interval |
 | `checkDeviceApi` | `false` | cloud cross-check incl. #501 detection |
+
+
+## Platform support
+
+| Platform | Status | Notes |
+|---|---|---|
+| macOS (Apple Silicon / Intel) | ✅ First-class | All features tested (detect/notify/heal/guardrails) |
+| Linux | ⚠️ Best-effort | Detection & healing work; notifications via `notify-send` (silent if absent); uv discovery falls back to PATH, untested |
+| Windows | ❌ Untested | Code paths exist (PowerShell toast, process ops); no real-machine verification — feedback welcome |
 
 ## Privacy
 
