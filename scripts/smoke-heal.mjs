@@ -63,7 +63,14 @@ function makeFixture(tag, wedgeFailures) {
   }
   cleanupDirs.push(home)
   const paths = { ...aaPaths(home) }
-  return { home, paths, uvBin, marker: path.join(aa, 'fake-uv-invocations.log') }
+  return {
+    home,
+    paths,
+    uvBin,
+    sourceDir: source,
+    configPath: path.join(aa, 'dsh-bridge-next', 'connector', 'connector.json'),
+    marker: path.join(aa, 'fake-uv-invocations.log'),
+  }
 }
 
 function alive(pid) {
@@ -98,20 +105,25 @@ async function waitMarker(marker, ms = 8000) {
 
 try {
   // ② wedged：真实杀掉 → 假 uv 重新拉起
+  // wedged 进程以 Connector 形态运行（假 uv + anywhere-cli 参数），使 PID 防线判定其为 Connector
   {
     const fx = makeFixture('wedged', 8)
     const healer = new Healer(fx.paths, (l) => console.log(`    [log] ${l}`), fx.uvBin)
-    const oldProc = spawn('sleep', ['300'], { stdio: 'ignore' })
+    const oldProc = spawn(fx.uvBin, ['run', '--directory', fx.sourceDir, 'anywhere-cli', 'rpc', '--config', fx.configPath], { stdio: 'ignore' })
     cleanupProcs.push(oldProc)
     await new Promise((r) => setTimeout(r, 500))
     const outcome = await healer.restartWedged(oldProc.pid, 'dsh-plugin')
     const oldDead = await waitDead(oldProc.pid)
-    const marker = await waitMarker(fx.marker)
-    const ok = outcome.ok && oldDead && marker !== null && marker.includes('anywhere-cli rpc')
+    await new Promise((r) => setTimeout(r, 800))
+    const marker = fs.existsSync(fx.marker) ? fs.readFileSync(fx.marker, 'utf8') : null
+    const markerLines = marker ? marker.trim().split('\n').length : 0
+    const newAlive = outcome.pid ? alive(outcome.pid) : false
+    const ok =
+      outcome.ok && oldDead && markerLines >= 2 && newAlive && outcome.pid !== undefined
     results.push([
-      '② wedged: SIGTERM 生效 + 假 uv 被调用（rpc 参数正确）+ 新进程拉起',
+      '② wedged: PID 防线放行 + SIGTERM 生效 + 假 uv 二次调用 + 新进程拉起',
       ok,
-      `outcome=${JSON.stringify(outcome)} oldDead=${oldDead} marker=${marker ? marker.slice(0, 60) : '无'}`,
+      `outcome=${JSON.stringify(outcome)} oldDead=${oldDead} markerLines=${markerLines} newAlive=${newAlive}`,
     ])
     if (outcome.pid) cleanupProcs.push({ kill: () => process.kill(outcome.pid, 'SIGKILL') })
   }
