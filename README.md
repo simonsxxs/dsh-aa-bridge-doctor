@@ -103,7 +103,7 @@ Gitee 同步仓库：[gitee.com/simonsxx/dsh-aa-bridge-doctor](https://gitee.com
 
 ## 作者 / Author
 
-**simon** — [github.com/simonsxxs](https://github.com/simonsxxs)
+**simon** <simonsxx@qq.com> — [github.com/simonsxxs](https://github.com/simonsxxs)
 
 背景与技术分析：本插件源于一次真实的桥接故障取证，根因报告见 [docs/ROOT_CAUSE.md](./docs/ROOT_CAUSE.md)。
 

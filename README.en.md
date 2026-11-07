@@ -77,7 +77,7 @@ Gitee mirror: [gitee.com/simonsxx/dsh-aa-bridge-doctor](https://gitee.com/simons
 
 ## Author
 
-**simon** — [github.com/simonsxxs](https://github.com/simonsxxs)
+**simon** <simonsxx@qq.com> — [github.com/simonsxxs](https://github.com/simonsxxs)
 
 This plugin was born from a real-world incident investigation; see [docs/ROOT_CAUSE.md](./docs/ROOT_CAUSE.md) for the full root-cause analysis.
 
