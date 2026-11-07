@@ -75,9 +75,13 @@ Pure-tsc build, no native bundler, Node ≥ 22.19.
 
 Gitee mirror: [gitee.com/simonsxx/dsh-aa-bridge-doctor](https://gitee.com/simonsxx/dsh-aa-bridge-doctor) (read-only mirror for faster access in China; GitHub is authoritative)
 
-## Author
+## Author / 作者
 
-**simon** <simonsxx@qq.com> — [github.com/simonsxxs](https://github.com/simonsxxs)
+- **Author / 作者**：simon — 一个不懂代码的 AI 极客 (a non-coder AI geek) <simonsxx@qq.com>
+- **WeChat group / 微信交流群**：simonsxxs
+- **Website / 个人网站**：<https://simonsxx.com>
+- **GitHub**：<https://github.com/simonsxxs>
+- **Gitee**：<https://gitee.com/simonsxx>
 
 This plugin was born from a real-world incident investigation; see [docs/ROOT_CAUSE.md](./docs/ROOT_CAUSE.md) for the full root-cause analysis.
 
