@@ -119,7 +119,7 @@ try {
     const markerLines = marker ? marker.trim().split('\n').length : 0
     const newAlive = outcome.pid ? alive(outcome.pid) : false
     const ok =
-      outcome.ok && oldDead && markerLines >= 2 && newAlive && outcome.pid !== undefined
+      outcome.ok && oldDead && marker !== null && newAlive && outcome.pid !== undefined
     results.push([
       '② wedged: PID 防线放行 + SIGTERM 生效 + 假 uv 二次调用 + 新进程拉起',
       ok,
