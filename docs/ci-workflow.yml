@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install
+        run: npm install
+      - name: Check (typecheck + build + tests)
+        run: npm run check
+      - name: Integration smokes
+        run: |
+          npm run smoke:apply
+          npm run smoke:heal
+          npm run smoke:cordis
+      - name: Package dry-run
+        run: npm pack --dry-run
