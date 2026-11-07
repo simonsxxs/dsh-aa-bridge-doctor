@@ -25,14 +25,14 @@
 
 | 判定 | 条件 | 默认动作 |
 |---|---|---|
-| `exited` | 记录存在但进程死亡。**护栏**：退出记录新鲜（< 10 分钟，多半是用户主动停止或插件受控重启）时只提醒不拉起；退出已久无人处理的（#1334 形态）才自动重新拉起 | 通知；`autoRestartExited` 开启且判定为陈旧死亡时**自动重新拉起**（无租约冲突，安全） |
-| `wedged` | 进程存活且窗口内失败 ≥ `failureThreshold` | 通知；`autoRestartWedged` 开启时**自动重启 Connector**（SIGTERM→等退出→按原命令行/标准命令重新拉起） |
+| `exited` | 记录存在但进程死亡。**退出码甄别**：exit=0/143（主动/受控停止形态）**任何年龄段都不自动拉起**；异常退出码经 10 分钟陈旧窗口后自动拉起（#1334 形态）；无退出记录视为未知死亡、立即允许拉起。退出后若有新实例启动过（running 事件），旧记录不再生效 | 通知；`autoRestartExited` 开启且通过上述甄别时**自动重新拉起**（无租约冲突，安全） |
+| `wedged` | 进程存活且（窗口内失败 ≥ `failureThreshold` **或** AA 日志静默 ≥ `logSilenceMinutes`——事件循环挂死变体） | 通知；`autoRestartWedged` 开启时**自动重启 Connector**（身份校验→预检→SIGTERM→存活验证） |
 | `stuck-syncing` | （需 `checkDeviceApi`）DSH Runtime 卡「正在同步 DSH 会话…」≥ 15 分钟 | 通知恢复指引：设备页对 DeepSeek Harness 重新「一键配置」（#501 形态） |
 | `healthy` / `not-installed` | 其余 | 不动作 |
 
 护栏：冷却时间（`cooldownMinutes`）、每日上限（`maxRestartsPerDay`）、所有动作写入 `~/.agents-anywhere/bridge-doctor/bridge-doctor.log`。
 
-拉起方式：优先复用 **DSH NEXT 内置的 uv**（`app.asar.unpacked/@dataiku/uv`）直接构造 argv（空格路径安全），兜底 PATH 上的 `uv`，最后才尝试 `ps` 捕获的命令行（校验首个路径真实存在）。拉起的进程与官方插件拉起的一样，**随 DSH NEXT 退出而退出**，不改变任何归属关系。
+拉起方式：优先复用 **DSH NEXT 内置的 uv**（`app.asar.unpacked/@dataiku/uv`）直接构造 argv（空格路径安全），兜底 PATH 上的 `uv`。终止前先做 PID 身份校验（无法确认即放弃——Fail Closed）与启动条件预检；拉起后做存活验证（8 秒窗口）。注意：拉起使用分离进程（detached），DSH 退出后其存续取决于系统进程管理，**不承诺严格随 DSH 退出**。
 
 ## 安装 / Install
 
@@ -47,7 +47,7 @@ dsh plugin --profile desktop add dsh-aa-bridge-doctor
 方式 B — 从源码：
 
 ```bash
-git clone <repo> && cd dsh-aa-bridge-doctor
+git clone https://github.com/simonsxxs/dsh-aa-bridge-doctor.git && cd dsh-aa-bridge-doctor
 npm install && npm run check
 dsh plugin --profile desktop add .
 ```
@@ -74,12 +74,12 @@ dsh plugin --profile desktop add .
 | 配置 | 默认 | 说明 |
 |---|---|---|
 | `enabled` | `true` | 总开关 |
+| `uvPath` | `''` | 自定义 uv 路径（必须是可执行文件；留空自动发现） |
 | `autoRestartExited` | `true` | 进程退出后自动重新拉起 |
 | `autoRestartWedged` | `false` | 卡死时自动重启 Connector（默认仅提醒） |
-| `failureThreshold` | `5` | 窗口内失败次数阈值 |
-| `windowMinutes` | `5` | 失败统计窗口（分钟） |
-| `cooldownMinutes` | `60` | 自动恢复冷却 |
-| `maxRestartsPerDay` | `6` | 每日自动恢复上限 |
+| `failureThreshold` / `windowMinutes` | `4` / `10` | 失败签名（依据 #381 实测 60~120s 节奏反推；旧 5/5 对 120s 节奏漏检） |
+| `logSilenceMinutes` | `15` | 日志静默判定（分钟）：进程存活但 AA 日志无写入 |
+| `cooldownMinutes` / `maxRestartsPerDay` | `60` / `6` | 自动恢复冷却 / 每日上限（失败的恢复尝试同样消耗配额） |
 | `pollSeconds` | `30` | 检查间隔 |
 | `checkDeviceApi` | `false` | 联网核对设备状态（读取本机 `account.json` 的 token，仅查询、不落日志） |
 
@@ -102,7 +102,7 @@ dsh plugin --profile desktop add .
 
 ```bash
 npm install
-npm run check   # typecheck + build + 12 项单元测试
+npm run check   # typecheck + build + 全量单元测试
 ```
 
 无原生打包依赖（纯 tsc），任何 Node ≥ 22.19 环境可构建。

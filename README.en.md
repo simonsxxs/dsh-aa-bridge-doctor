@@ -24,14 +24,14 @@ A read-only watcher runs every `pollSeconds` and combines three signals:
 
 | Verdict | Condition | Default action |
 |---|---|---|
-| `exited` | record exists, process dead. **Guard**: a fresh exit (< 10 min, likely a manual stop) only notifies; a stale silent death auto-relaunches (per dsh-desktop#1334) | notify; auto-relaunch when `autoRestartExited` |
-| `wedged` | process alive, failures ≥ `failureThreshold` | notify; auto-restart when `autoRestartWedged` (SIGTERM → wait → relaunch) |
+| `exited` | record exists, process dead. **Exit-code triage**: exit=0/143 (deliberate/controlled stop) **never auto-relaunches at any age**; abnormal exit codes auto-relaunch after a 10-minute stale window (dsh-desktop#1334); no exit record = unknown death, relaunch allowed immediately. A newer `[process] running` event invalidates the old exit record | notify; auto-relaunch when `autoRestartExited` and triage passes |
+| `wedged` | process alive AND (failures ≥ `failureThreshold` OR AA log silent ≥ `logSilenceMinutes` — event-loop hang variant) | notify; auto-restart when `autoRestartWedged` (identity check → preflight → SIGTERM → liveness verification) |
 | `stuck-syncing` | (needs `checkDeviceApi`) DSH Runtime stuck at "Syncing DSH sessions…" ≥ 15 min | notify with recovery guidance (#501 shape) |
 | `healthy` / `not-installed` | otherwise | no action |
 
 Guardrails: cooldown between heals, per-day cap, PID-reuse protection (never kills a process whose command line isn't the Connector), full action log at `~/.agents-anywhere/bridge-doctor/`.
 
-Relaunch path: prefers the **uv bundled with DSH NEXT** (`app.asar.unpacked/@dataiku/uv`), falls back to `PATH`, constructs argv directly (spaces-safe). The relaunched process lives and dies exactly like the official plugin's own child.
+Relaunch path: prefers the **uv bundled with DSH NEXT** (`app.asar.unpacked/@dataiku/uv`), falls back to `PATH`, constructs argv directly (spaces-safe). Before terminating, the doctor verifies the PID identity (fail-closed: unverifiable means no kill) and pre-flights the launch prerequisites; after launch it verifies the new process survives an 8-second window. Note: the process is spawned detached — its survival after DSH exits depends on system process management and is **not guaranteed to follow DSH**.
 
 ## Install
 
@@ -48,7 +48,7 @@ Manual install (verified against real DSH NEXT profiles) — see [README.md 方�
 | Key | Default | Meaning |
 |---|---|---|
 | `enabled` | `true` | master switch |
-| `uvPath` | `''` | custom uv path (empty = auto-discover) |
+| `uvPath` | `''` | custom uv path (must be an executable file; empty = auto-discover) |
 | `autoRestartExited` | `true` | auto-relaunch after process exit (guarded) |
 | `autoRestartWedged` | `false` | auto-restart on wedge (default notify-only) |
 | `failureThreshold` / `windowMinutes` | `4` / `10` | wedge signature (derived from the #381 60–120s cadence; the old 5/5 missed it) |
@@ -74,7 +74,7 @@ Everything runs locally. The only network access is the optional `checkDeviceApi
 
 ```bash
 npm install
-npm run check   # typecheck + build + 30 unit tests
+npm run check   # typecheck + build + full unit suite
 npx tsx scripts/smoke-apply.mjs   # lifecycle integration smoke (tmp fixtures)
 npx tsx scripts/smoke-heal.mjs    # hermetic kill→relaunch mechanics smoke
 ```

@@ -97,22 +97,36 @@ describe('logscan.parseLine', () => {
     const line =
       '[{"source": "connector", "record": {"time": "2026-11-07T12:07:34.716083+08:00", "level": "WARNING", "name": "connector.server.client", "message": "connector backend network unavailable error=backend authentication request failed: ; reconnecting in 3.0s"}}]'
     const r = parseLine(line, windowStart)
-    assert.equal(r.fail, true)
-    assert.equal(r.at, '2026-11-07T12:07:34.716083+08:00')
+    assert.equal(r.failCount, 1)
+    assert.equal(r.lastFailAt, '2026-11-07T12:07:34.716083+08:00')
+  })
+
+  it('一行数组含多条失败记录时逐条计数（评审修复）', () => {
+    const rec = (t, msg) => ({ source: 'connector', record: { time: t, level: 'WARNING', name: 'x', message: msg } })
+    const line = JSON.stringify([
+      rec('2026-11-07T12:01:00+08:00', 'heartbeat ok'),
+      rec('2026-11-07T12:02:00+08:00', 'backend authentication request failed: ; reconnecting'),
+      rec('2026-11-07T12:03:00+08:00', 'backend authentication request failed: ; reconnecting'),
+      rec('2026-11-07T12:04:00+08:00', 'another info'),
+    ])
+    const r = parseLine(line, windowStart)
+    assert.equal(r.failCount, 2)
+    assert.equal(r.lastFailAt, '2026-11-07T12:03:00+08:00')
+    assert.equal(r.newestAt, '2026-11-07T12:04:00+08:00')
   })
 
   it('窗口之前的失败不计入', () => {
     const line =
       '[{"source": "connector", "record": {"time": "2026-11-07T07:54:10.246455+08:00", "level": "WARNING", "name": "x", "message": "backend authentication request failed: ; reconnecting"}}]'
     const r = parseLine(line, windowStart)
-    assert.equal(r.fail, false)
+    assert.equal(r.failCount, 0)
   })
 
   it('无关行不报错不计数', () => {
-    assert.equal(parseLine('{"hello":"world"}', windowStart).fail, false)
-    assert.equal(parseLine('', windowStart).fail, false)
-    assert.equal(parseLine('garbage line without json', windowStart).fail, false)
-    assert.equal(parseLine('[{"record":{"message":"backend authentication request failed: x"}}]', windowStart).fail, false)
+    assert.equal(parseLine('{"hello":"world"}', windowStart).failCount, 0)
+    assert.equal(parseLine('', windowStart).failCount, 0)
+    assert.equal(parseLine('garbage line without json', windowStart).failCount, 0)
+    assert.equal(parseLine('[{"record":{"message":"backend authentication request failed: x"}}]', windowStart).failCount, 0)
   })
 })
 
