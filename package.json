@@ -31,7 +31,10 @@
     "build": "tsc -p tsconfig.host.json",
     "typecheck": "tsc -p tsconfig.host.json --noEmit",
     "test": "tsx --test tests/unit/*.test.ts",
+    "smoke:apply": "tsx scripts/smoke-apply.mjs",
+    "smoke:heal": "tsx scripts/smoke-heal.mjs",
     "check": "npm run typecheck && npm run build && npm run test",
+    "rc": "npm run check && npm run smoke:apply && npm run smoke:heal && npm pack --dry-run",
     "prepublishOnly": "npm run check && npm pack --dry-run"
   },
   "peerDependencies": {

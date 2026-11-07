@@ -51,9 +51,11 @@ function makeFixtureHome(tag, { pid, failures, now = Date.now() }) {
   return home
 }
 
-function readLog(home) {
+function readLog(home, tag) {
   const f = path.join(home, '.agents-anywhere', 'bridge-doctor', 'bridge-doctor.log')
-  return fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : ''
+  const content = fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '(日志文件未创建)'
+  logsByTag[tag] = content
+  return content
 }
 
 const baseConfig = {
@@ -69,6 +71,7 @@ const baseConfig = {
 // 常驻的"存活进程"：睡 300 秒，够冒烟用
 const sleeper = spawn('sleep', ['300'], { stdio: 'ignore' })
 const results = []
+const logsByTag = {}
 
 try {
   // ① healthy
@@ -77,7 +80,7 @@ try {
     const dispose = mod.startDoctor({ ...baseConfig, autoRestartExited: true, autoRestartWedged: false }, (await import('../src/host/paths.js')).aaPaths(home))
     await new Promise((r) => setTimeout(r, 11_000))
     dispose()
-    const log = readLog(home)
+    const log = readLog(home, 'healthy')
     results.push([
       '① healthy: 启动+检查正常+无恢复动作',
       log.includes('Bridge Doctor 启动') && log.includes('检查正常') && !log.includes('恢复结果'),
@@ -92,7 +95,7 @@ try {
     const dispose = mod.startDoctor({ ...baseConfig, autoRestartExited: true, autoRestartWedged: false }, (await import('../src/host/paths.js')).aaPaths(home))
     await new Promise((r) => setTimeout(r, 11_000))
     dispose()
-    const log = readLog(home)
+    const log = readLog(home, 'wedged')
     results.push([
       '② wedged: 检出 + 仅提醒跳过（模式未开启）',
       log.includes('检测到 wedged') && log.includes('跳过（模式未开启）') && !log.includes('处理：重启卡死'),
@@ -106,7 +109,7 @@ try {
     const dispose = mod.startDoctor({ ...baseConfig, autoRestartExited: true }, (await import('../src/host/paths.js')).aaPaths(home))
     await new Promise((r) => setTimeout(r, 11_000))
     dispose()
-    const log = readLog(home)
+    const log = readLog(home, 'exited')
     results.push([
       '③ exited: 检出 + 走到恢复路径（夹具缺源码，预期失败）',
       log.includes('检测到 exited') && log.includes('恢复结果: 失败') && log.includes('connector-source'),
@@ -119,9 +122,14 @@ try {
 
 console.log('\n===== startDoctor 集成冒烟结果 =====')
 let pass = true
-for (const [name, ok] of results) {
+const tags = ['healthy', 'wedged', 'exited']
+for (let i = 0; i < results.length; i++) {
+  const [name, ok] = results[i]
   console.log(`${ok ? '✅' : '❌'} ${name}`)
-  if (!ok) pass = false
+  if (!ok) {
+    pass = false
+    console.log(`    [夹具日志]\n${(logsByTag[tags[i]] || '(无)').split('\n').map(l => '    | ' + l).join('\n')}`)
+  }
 }
 console.log(pass ? '\n✅ 集成冒烟全部通过' : '\n❌ 集成冒烟存在失败')
 process.exit(pass ? 0 : 1)

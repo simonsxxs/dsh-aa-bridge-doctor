@@ -179,10 +179,11 @@ export function shouldRotateLog(sizeBytes: number): boolean {
   return sizeBytes > LOG_ROTATE_BYTES
 }
 
-function appendLog(file: string, line: string): void {
+export function appendLog(file: string, line: string): void {
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true })
-    if (shouldRotateLog(fs.statSync(file).size)) {
+    // 注意：文件不存在是常态（首次运行），statSync 必须放在 existsSync 守卫内，否则首写被吞
+    if (fs.existsSync(file) && shouldRotateLog(fs.statSync(file).size)) {
       fs.renameSync(file, `${file}.1`)
     }
     fs.appendFileSync(file, `[${new Date().toISOString()}] ${line}\n`)
