@@ -97,6 +97,10 @@ npm run check   # typecheck + build + 12 项单元测试
 
 无原生打包依赖（纯 tsc），任何 Node ≥ 22.19 环境可构建。
 
+## 镜像 / Mirror
+
+Gitee 同步仓库：[gitee.com/simonsxx/dsh-aa-bridge-doctor](https://gitee.com/simonsxx/dsh-aa-bridge-doctor)（国内访问更快的只读镜像，以 GitHub 为准）
+
 ## 作者 / Author
 
 **simon** — [github.com/simonsxxs](https://github.com/simonsxxs)

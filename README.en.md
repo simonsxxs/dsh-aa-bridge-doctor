@@ -71,6 +71,10 @@ npx tsx scripts/smoke-heal.mjs    # hermetic kill→relaunch mechanics smoke
 
 Pure-tsc build, no native bundler, Node ≥ 22.19.
 
+## Mirror
+
+Gitee mirror: [gitee.com/simonsxx/dsh-aa-bridge-doctor](https://gitee.com/simonsxx/dsh-aa-bridge-doctor) (read-only mirror for faster access in China; GitHub is authoritative)
+
 ## Author
 
 **simon** — [github.com/simonsxxs](https://github.com/simonsxxs)
