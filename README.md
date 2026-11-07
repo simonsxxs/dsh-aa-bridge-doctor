@@ -26,6 +26,7 @@
 |---|---|---|
 | `exited` | 记录存在但进程死亡 | 通知；`autoRestartExited` 开启时**自动重新拉起**（无租约冲突，安全） |
 | `wedged` | 进程存活且窗口内失败 ≥ `failureThreshold` | 通知；`autoRestartWedged` 开启时**自动重启 Connector**（SIGTERM→等退出→按原命令行/标准命令重新拉起） |
+| `stuck-syncing` | （需 `checkDeviceApi`）DSH Runtime 卡「正在同步 DSH 会话…」≥ 15 分钟 | 通知恢复指引：设备页对 DeepSeek Harness 重新「一键配置」（#501 形态） |
 | `healthy` / `not-installed` | 其余 | 不动作 |
 
 护栏：冷却时间（`cooldownMinutes`）、每日上限（`maxRestartsPerDay`）、所有动作写入 `~/.agents-anywhere/bridge-doctor/bridge-doctor.log`。

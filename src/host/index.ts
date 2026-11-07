@@ -8,6 +8,7 @@ import { scanRecentFailures } from './logscan.js'
 import { isAlive } from './process.js'
 import { notify } from './notifier.js'
 import { Healer } from './healer.js'
+import { readAccount, readConnectorId, fetchDeviceStatus, fetchDshRuntime, findStuckDshRuntime } from './device.js'
 
 export { Config }
 export const name = 'dsh-aa-bridge-doctor'
@@ -18,6 +19,7 @@ const DEFAULTS = {
   cooldownMinutes: 60,
   maxRestartsPerDay: 6,
   pollSeconds: 30,
+  stuckStartingMinutes: 15,
 }
 
 export function apply(ctx: Context, config: ConfigType) {
@@ -30,7 +32,11 @@ export function apply(ctx: Context, config: ConfigType) {
     cooldownMinutes: config.cooldownMinutes ?? DEFAULTS.cooldownMinutes,
     maxRestartsPerDay: config.maxRestartsPerDay ?? DEFAULTS.maxRestartsPerDay,
     pollSeconds: Math.max(10, config.pollSeconds ?? DEFAULTS.pollSeconds),
+    checkDeviceApi: config.checkDeviceApi ?? false,
   }
+  // DSH Runtime 卡「正在同步」的首次观测时间（会话内存即可）
+  const startingSeen = new Map<string, number>()
+  const stuckNotified = new Set<string>()
 
   appendLog(
     paths.doctorLog,
@@ -43,6 +49,9 @@ export function apply(ctx: Context, config: ConfigType) {
     busy = true
     try {
       await runOnce(config, settings, paths, healer)
+      if (settings.checkDeviceApi) {
+        await checkDshRuntimeStuck(settings, paths, healer, startingSeen, stuckNotified)
+      }
     } catch (err) {
       appendLog(paths.doctorLog, `检查轮出错: ${err instanceof Error ? err.stack : String(err)}`)
     } finally {
@@ -148,4 +157,37 @@ function appendLog(file: string, line: string): void {
   } catch {
     /* 日志失败不影响主流程 */
   }
+}
+
+/** #501 形态检测：DSH Runtime 卡「正在同步 DSH 会话…」超过阈值 → 通知恢复指引（只提醒，不动状态） */
+async function checkDshRuntimeStuck(
+  settings: { checkDeviceApi: boolean },
+  paths: ReturnType<typeof aaPaths>,
+  healer: Healer,
+  startingSeen: Map<string, number>,
+  stuckNotified: Set<string>,
+): Promise<void> {
+  if (!settings.checkDeviceApi) return
+  const account = readAccount(paths)
+  const cid = readConnectorId(paths)
+  if (!account || !cid) return
+
+  const snap = await fetchDshRuntime(account.apiBaseUrl, account.accessToken, cid)
+  const stuck = findStuckDshRuntime(snap, startingSeen, Date.now(), DEFAULTS.stuckStartingMinutes)
+  if (!stuck) {
+    // 恢复正常后允许下次再提醒
+    if (snap && stuckNotified.has(snap.runtimeId) && snap.status !== 'starting') stuckNotified.delete(snap.runtimeId)
+    return
+  }
+  const key = `${stuck.runtimeId}:${new Date().toDateString()}`
+  if (stuckNotified.has(key)) return
+  stuckNotified.add(key)
+  appendLog(
+    paths.doctorLog,
+    `检测到 DSH Runtime 卡「正在同步」runtimeId=${stuck.runtimeId} 已持续 ${stuck.stuckMinutes} 分钟（#501 形态）`,
+  )
+  notify(
+    'AA Bridge Doctor',
+    `DSH Runtime 卡在「正在同步 DSH 会话…」已 ${stuck.stuckMinutes} 分钟。请在手机/网页设备页对 DeepSeek Harness 重新「一键配置」（重建 runtime 实例即可恢复）。`,
+  )
 }

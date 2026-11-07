@@ -21,5 +21,5 @@ export const Config: z<Config> = z.object({
   cooldownMinutes: z.number().default(60).min(5).max(1440).description('两次自动恢复的最短间隔（分钟）'),
   maxRestartsPerDay: z.number().default(6).min(1).max(48).description('每日自动恢复上限'),
   pollSeconds: z.number().default(30).min(10).max(600).description('检查间隔（秒）'),
-  checkDeviceApi: z.boolean().default(false).description('联网核对设备在线状态（可选，读取本机 account.json）'),
+  checkDeviceApi: z.boolean().default(false).description('启用云端检测：查询 DSH Runtime 是否卡「正在同步」（#501，读取本机 account.json 的 token，仅查询）'),
 })
