@@ -29,14 +29,17 @@ function makeFixture(tag, wedgeFailures) {
     path.join(aa, 'dsh-bridge-next', 'connector', 'connector.json'),
     JSON.stringify({ serverUrl: 'http://127.0.0.1:1', connectorId: 'conn_fixture', statePath: '' }),
   )
-  // 假 uv：记录参数 → exec sleep 300（模拟长驻 Connector 进程）
+  // 假 uv：记录参数（模拟 Connector 启动），保持原 argv 存活（不 exec，
+  // 否则 ps 显示为纯 sleep，PID 防线会正确地拒绝终止它）
   const uvBin = path.join(aa, 'fake-uv')
   fs.writeFileSync(
     uvBin,
     [
       '#!/bin/bash',
       `echo "$@" >> ${JSON.stringify(path.join(aa, 'fake-uv-invocations.log'))}`,
-      'exec sleep 300',
+      'sleep 300 &',
+      "trap 'kill %1 2>/dev/null' EXIT",
+      'wait %1',
     ].join('\n'),
   )
   fs.chmodSync(uvBin, 0o755)
