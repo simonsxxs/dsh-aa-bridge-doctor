@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import { Config, type Config as ConfigType } from './config.js'
 import { aaPaths, type AaPaths } from './paths.js'
@@ -25,11 +26,20 @@ const DEFAULTS = {
 
 export function apply(ctx: Context, config: ConfigType) {
   if (!config.enabled) return
-  return startDoctor(config, aaPaths())
+  return startDoctor(config, aaPaths(), (cleanup) => {
+    // 兜底：fork 的 typed 事件 internal/status —— fiber 进入 DISPOSED(4) 时触发清理
+    ctx.on('internal/status' as never, ((fiber: { state?: number }) => {
+      if (fiber?.state === 4) cleanup()
+    }) as never)
+  })
 }
 
 /** 可注入路径的核心启动逻辑（便于测试与复用） */
-export function startDoctor(config: ConfigType, paths: AaPaths): () => void {
+export function startDoctor(
+  config: ConfigType,
+  paths: AaPaths,
+  registerDispose?: (cleanup: () => void) => void,
+): () => void {
   const healer = new Healer(paths, (line) => appendLog(paths.doctorLog, line), config.uvPath ?? '')
   const settings = {
     failureThreshold: config.failureThreshold ?? DEFAULTS.failureThreshold,
@@ -50,10 +60,44 @@ export function startDoctor(config: ConfigType, paths: AaPaths): () => void {
   )
 
   let busy = false
+  let cleaned = false
+  const cleanup = (): void => {
+    if (cleaned) return
+    cleaned = true
+    clearInterval(timer)
+    clearTimeout(firstRun)
+    appendLog(paths.doctorLog, 'Bridge Doctor 停止')
+  }
+  // 卸载兜底注册（幂等）：apply 传入 ctx.on('internal/status') 实现
+  registerDispose?.(cleanup)
+
+  // 实例标记（newest-wins 自退役）：不依赖 cordis 的卸载语义。
+  // 配置更新/重载产生更新实例时，旧实例在下一个检查轮自行退出，避免双跑。
+  const instanceId = randomUUID()
+  const startedAt = Date.now()
+  const instanceMarker = path.join(paths.doctorDir, 'instance.json')
+  try {
+    fs.mkdirSync(paths.doctorDir, { recursive: true })
+    fs.writeFileSync(instanceMarker, JSON.stringify({ instanceId, pid: process.pid, startedAt: Date.now() }))
+  } catch {
+    /* 标记失败不影响主流程 */
+  }
+
   const tick = async (): Promise<void> => {
     if (busy) return
     busy = true
     try {
+      // 自退役检查：存在更新的实例 → 让位
+      try {
+        const m = JSON.parse(fs.readFileSync(instanceMarker, 'utf8'))
+        if (m?.instanceId !== instanceId && (m?.startedAt ?? 0) > Date.now() - 5 * 60_000 && (m?.startedAt ?? 0) > startedAt) {
+          appendLog(paths.doctorLog, `检测到更新的 Doctor 实例（${m.instanceId}），本实例自行退出`)
+          cleanup()
+          return
+        }
+      } catch {
+        /* 标记读取失败按无更新处理 */
+      }
       await runOnce(config, settings, paths, healer)
       if (settings.checkDeviceApi) {
         await checkDshRuntimeStuck(paths, startingSeen, stuckNotified)
@@ -68,12 +112,8 @@ export function startDoctor(config: ConfigType, paths: AaPaths): () => void {
   const timer = setInterval(() => void tick(), settings.pollSeconds * 1_000)
   const firstRun = setTimeout(() => void tick(), 8_000)
 
-  // cordis：apply 返回的函数在插件卸载时执行
-  return () => {
-    clearInterval(timer)
-    clearTimeout(firstRun)
-    appendLog(paths.doctorLog, 'Bridge Doctor 停止')
-  }
+  // cordis 标准机制：apply 返回的 disposer 在 fiber 卸载时执行（幂等，与兜底并存）
+  return cleanup
 }
 
 async function runOnce(

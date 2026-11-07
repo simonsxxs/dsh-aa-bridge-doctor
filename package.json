@@ -34,8 +34,9 @@
     "smoke:apply": "tsx scripts/smoke-apply.mjs",
     "smoke:heal": "tsx scripts/smoke-heal.mjs",
     "check": "npm run typecheck && npm run build && npm run test",
-    "rc": "npm run check && npm run smoke:apply && npm run smoke:heal && npm pack --dry-run",
-    "prepublishOnly": "npm run check && npm pack --dry-run"
+    "rc": "npm run check && npm run smoke:apply && npm run smoke:heal && npm run smoke:cordis && npm pack --dry-run",
+    "prepublishOnly": "npm run check && npm pack --dry-run",
+    "smoke:cordis": "tsx scripts/smoke-cordis.mjs"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.4 || ~4.1.0",
