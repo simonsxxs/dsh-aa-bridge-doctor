@@ -15,6 +15,7 @@ export interface HealerState {
 export interface HealerOutcome {
   action: 'none' | 'relaunch' | 'restart'
   ok: boolean
+  pid?: number
   detail: string
 }
 
@@ -33,7 +34,12 @@ function execPromise(cmd: string, args: string[], timeout = 5_000): Promise<stri
 export class Healer {
   private state: HealerState = { lastHealAt: {}, restartsToday: 0, restartsDay: '' }
 
-  constructor(private readonly paths: AaPaths, private readonly log: (line: string) => void) {}
+  constructor(
+    private readonly paths: AaPaths,
+    private readonly log: (line: string) => void,
+    /** 自定义 uv 路径（对齐官方 AA 配置同名项）；留空自动发现 */
+    private readonly uvPath = '',
+  ) {}
 
   private loadState(): HealerState {
     try {
@@ -88,7 +94,7 @@ export class Healer {
     if (launched.ok) {
       this.markHealed('exited')
       this.log(`重新拉起成功 pid=${launched.pid}（${launched.source}）`)
-      return { action: 'relaunch', ok: true, detail: `pid=${launched.pid}` }
+      return { action: 'relaunch', ok: true, pid: launched.pid, detail: `pid=${launched.pid}` }
     }
     this.log(`重新拉起失败: ${launched.error}`)
     return { action: 'relaunch', ok: false, detail: launched.error ?? '未知错误' }
@@ -112,7 +118,7 @@ export class Healer {
     if (launched.ok) {
       this.markHealed('wedged')
       this.log(`重启成功 pid=${launched.pid}（${launched.source}）`)
-      return { action: 'restart', ok: true, detail: `pid=${launched.pid}（${launched.source}）` }
+      return { action: 'restart', ok: true, pid: launched.pid, detail: `pid=${launched.pid}（${launched.source}）` }
     }
     this.log(`重启失败: ${launched.error}`)
     return { action: 'restart', ok: false, detail: launched.error ?? '未知错误' }
@@ -168,8 +174,12 @@ export class Healer {
     return null
   }
 
-  /** uv 候选：DSH NEXT 内置 @dataiku/uv → PATH 上的 uv → ~/.local/bin/uv */
+  /** uv 候选：显式配置 → DSH NEXT 内置 @dataiku/uv → PATH 上的 uv → ~/.local/bin/uv */
   private async findUvBinary(): Promise<string | null> {
+    if (this.uvPath) {
+      if (fs.existsSync(this.uvPath)) return this.uvPath
+      this.log(`配置的 uvPath 不存在: ${this.uvPath}，改为自动发现`)
+    }
     const candidates = [
       '/Applications/DSH NEXT.app/Contents/Resources/app.asar.unpacked/node_modules/@dataiku/uv-darwin-arm64/bin/uv',
       path.join(this.paths.home, '.local', 'bin', 'uv'),

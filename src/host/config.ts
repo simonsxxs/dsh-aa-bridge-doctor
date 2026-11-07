@@ -2,6 +2,7 @@ import z from '@deepseek-ai/schemastery'
 
 export interface Config {
   enabled?: boolean
+  uvPath?: string
   autoRestartExited?: boolean
   autoRestartWedged?: boolean
   failureThreshold?: number
@@ -14,6 +15,7 @@ export interface Config {
 
 export const Config: z<Config> = z.object({
   enabled: z.boolean().default(true).description('启用桥接医生'),
+  uvPath: z.string().default('').description('自定义 uv 路径（留空自动发现：DSH 内置 → PATH → ~/.local/bin）'),
   autoRestartExited: z.boolean().default(true).description('进程退出后自动拉起（dsh-desktop#1334 场景）'),
   autoRestartWedged: z.boolean().default(false).description('卡死时自动重启 Connector（默认仅提醒）'),
   failureThreshold: z.number().default(5).min(2).max(100).description('卡死判定：窗口内失败次数阈值'),

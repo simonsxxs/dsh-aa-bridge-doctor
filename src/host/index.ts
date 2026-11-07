@@ -30,7 +30,7 @@ export function apply(ctx: Context, config: ConfigType) {
 
 /** 可注入路径的核心启动逻辑（便于测试与复用） */
 export function startDoctor(config: ConfigType, paths: AaPaths): () => void {
-  const healer = new Healer(paths, (line) => appendLog(paths.doctorLog, line))
+  const healer = new Healer(paths, (line) => appendLog(paths.doctorLog, line), config.uvPath ?? '')
   const settings = {
     failureThreshold: config.failureThreshold ?? DEFAULTS.failureThreshold,
     windowMinutes: config.windowMinutes ?? DEFAULTS.windowMinutes,
