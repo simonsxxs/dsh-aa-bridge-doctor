@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.2 (2026-11-09)
+
+社区审核（awesome-dsh-plugin #12877，判据 A）修复——从条目 URL 直接安装现在可用：
+
+- `lib/` 构建产物入库（不再被 .gitignore 忽略）：git 安装即含入口文件，无需构建
+- 新增 `prepare` 脚本（`npm run build`）：即便产物缺失也会在安装时用 tsc 重建（devDeps 已含 typescript）
+- 双保险路径：入库产物（零构建安装）+ prepare（自愈构建）
+
 ## 0.3.1 (2026-11-08)
 
 第五轮评审（自审复核）收尾：

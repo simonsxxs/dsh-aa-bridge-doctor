@@ -1,6 +1,6 @@
 {
   "name": "dsh-aa-bridge-doctor",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Detect and auto-recover Agents Anywhere bridge wedge (persistent device offline) for DeepSeek Harness",
   "repository": {
     "type": "git",
@@ -36,7 +36,8 @@
     "check": "npm run typecheck && npm run build && npm run test",
     "rc": "npm run check && npm run smoke:apply && npm run smoke:heal && npm run smoke:cordis && npm pack --dry-run",
     "prepublishOnly": "npm run check && npm pack --dry-run",
-    "smoke:cordis": "tsx scripts/smoke-cordis.mjs"
+    "smoke:cordis": "tsx scripts/smoke-cordis.mjs",
+    "prepare": "npm run build"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.4 || ~4.1.0",
